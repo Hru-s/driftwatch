@@ -1,0 +1,41 @@
+# Default deny for all Pods in team-a
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: team-a
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+
+---
+# Allow frontend -> api on port 80 in team-a
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-api
+  namespace: team-a
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 80
+  policyTypes: ["Ingress"]
+
+---
+# Default deny for all Pods in team-b
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: team-b
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+  labels:
+    # Baseline PSA level for the secure cluster (Cluster A)
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+
+    # Optional: helper labels for your experiments / docs
+    driftwatch.scenario: "psa-baseline-team-a-restricted"
+    driftwatch.role: "baseline"

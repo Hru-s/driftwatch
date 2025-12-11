@@ -1,0 +1,14 @@
+# PSA DRIFT: Namespace team-a has weaker Pod Security level in Cluster B.
+# Baseline cluster (A) has:
+#   pod-security.kubernetes.io/enforce: restricted
+# This version lowers it to "baseline" only on Cluster B.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    driftwatch.scenario: "psa-weaken-team-a"
+    driftwatch.cluster: "b"

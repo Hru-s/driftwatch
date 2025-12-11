@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-b
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infra
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-frontend
+  namespace: team-a
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-api
+  namespace: team-a
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-ops
+  namespace: team-a
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-frontend
+  namespace: team-b
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-api
+  namespace: team-b
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-ops
+  namespace: team-b

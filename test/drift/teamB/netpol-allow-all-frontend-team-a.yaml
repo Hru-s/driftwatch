@@ -1,0 +1,25 @@
+# NETPOL DRIFT: Overly-permissive NetworkPolicy for frontend Pods in team-a (Cluster B only).
+# Baseline cluster has:
+#   - deny-all (default deny)
+#   - allow-frontend-to-api (narrow allow)
+# This extra policy effectively opens ingress + egress for Pods with app=frontend.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all-frontend
+  namespace: team-a
+  labels:
+    driftwatch.scenario: "netpol-allow-all-frontend-team-a"
+    driftwatch.cluster: "b"
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - {}   # allow all sources, all ports
+  egress:
+    - {}   # allow all destinations, all ports

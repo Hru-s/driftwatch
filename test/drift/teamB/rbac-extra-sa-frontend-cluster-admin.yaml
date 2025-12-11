@@ -1,0 +1,19 @@
+# RBAC DRIFT: Over-privileged frontend in team-a (Cluster B only)
+# This binding does NOT exist in the baseline cluster (Cluster A).
+# It grants full cluster-admin permissions to the frontend service account.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sa-frontend-team-a-cluster-admin
+  labels:
+    driftwatch.scenario: "rbac-extra-sa-frontend-cluster-admin"
+    driftwatch.cluster: "b"
+subjects:
+  - kind: ServiceAccount
+    name: sa-frontend
+    namespace: team-a
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin

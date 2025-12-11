@@ -1,0 +1,111 @@
+# team-a frontend: read-only
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: frontend-reader
+  namespace: team-a
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: frontend-reader-binding
+  namespace: team-a
+subjects:
+  - kind: ServiceAccount
+    name: sa-frontend
+    namespace: team-a
+roleRef:
+  kind: Role
+  name: frontend-reader
+  apiGroup: rbac.authorization.k8s.io
+
+# team-a ops: manage Deployments + Pods
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ops-manager
+  namespace: team-a
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ops-manager-binding
+  namespace: team-a
+subjects:
+  - kind: ServiceAccount
+    name: sa-ops
+    namespace: team-a
+roleRef:
+  kind: Role
+  name: ops-manager
+  apiGroup: rbac.authorization.k8s.io
+
+# Mirror the same in team-b to keep baseline identical
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: frontend-reader
+  namespace: team-b
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: frontend-reader-binding
+  namespace: team-b
+subjects:
+  - kind: ServiceAccount
+    name: sa-frontend
+    namespace: team-b
+roleRef:
+  kind: Role
+  name: frontend-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ops-manager
+  namespace: team-b
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ops-manager-binding
+  namespace: team-b
+subjects:
+  - kind: ServiceAccount
+    name: sa-ops
+    namespace: team-b
+roleRef:
+  kind: Role
+  name: ops-manager
+  apiGroup: rbac.authorization.k8s.io

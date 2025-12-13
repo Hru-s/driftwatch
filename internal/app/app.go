@@ -280,7 +280,8 @@ type netPolDriftJSON struct {
 }
 
 type psaDriftJSON struct {
-	Drift []model.PSADriftEntry `json:"drift,omitempty"`
+	Extra   []model.PSADriftEntry `json:"extra,omitempty"`
+	Missing []model.PSADriftEntry `json:"missing,omitempty"`
 }
 
 type driftReportJSON struct {
@@ -407,12 +408,34 @@ func filterNetPolDriftToJSON(d diff.NetPolDrift, opts Options) netPolDriftJSON {
 
 func psaDriftToJSON(d diff.PSADrift, opts Options) psaDriftJSON {
 	out := psaDriftJSON{}
-	for _, e := range d.Entries {
-		if opts.IgnoreSystem && isSystemNamespace(e.Namespace) {
-			continue
+
+	addFiltered := func(dst *[]model.PSADriftEntry, src []model.PSADriftEntry) {
+		for _, e := range src {
+			if opts.IgnoreSystem && isSystemNamespace(e.Namespace) {
+				continue
+			}
+			*dst = append(*dst, e)
 		}
-		out.Drift = append(out.Drift, e)
+		// Stable ordering for deterministic output
+		sort.Slice(*dst, func(i, j int) bool {
+			return (*dst)[i].Namespace < (*dst)[j].Namespace
+		})
 	}
+
+	// Honor drift-type like RBAC (extra/missing/both)
+	switch opts.DriftType {
+	case "extra":
+		addFiltered(&out.Extra, d.Extra)
+	case "missing":
+		addFiltered(&out.Missing, d.Missing)
+	case "both":
+		addFiltered(&out.Extra, d.Extra)
+		addFiltered(&out.Missing, d.Missing)
+	default:
+		// normalizeDriftType() should prevent this, but keep safe default
+		addFiltered(&out.Extra, d.Extra)
+	}
+
 	return out
 }
 
@@ -437,6 +460,8 @@ func printJSONReport(
 	}
 
 	netpolJSON := filterNetPolDriftToJSON(netpolDrift, opts)
+
+	// ✅ PSA now respects drift-type via psaDriftToJSON
 	psaJSON := psaDriftToJSON(psaDrift, opts)
 
 	report := driftReportJSON{
@@ -588,15 +613,35 @@ func printHumanNetPol(opts Options, netpolDrift diff.NetPolDrift) {
 }
 
 func printHumanPSA(opts Options, psaDrift diff.PSADrift) {
-	filtered := psaDriftToJSON(psaDrift, opts).Drift
-	if len(filtered) == 0 {
+	j := psaDriftToJSON(psaDrift, opts)
+
+	hasExtra := len(j.Extra) > 0 && (opts.DriftType == "extra" || opts.DriftType == "both")
+	hasMissing := len(j.Missing) > 0 && (opts.DriftType == "missing" || opts.DriftType == "both")
+
+	if !hasExtra && !hasMissing {
 		fmt.Println(" No Pod Security Admission (PSA) drift detected matching the current filters.")
 		return
 	}
 
-	fmt.Printf(" Pod Security Admission (PSA) drift detected for %d namespace(s):\n", len(filtered))
-	for _, e := range filtered {
-		fmt.Printf("  - Namespace %s: baseline=%s, live=%s → %s\n",
-			e.Namespace, e.Baseline, e.Live, e.DriftType)
+	fmt.Println(" Pod Security Admission (PSA) drift detected:")
+
+	if hasExtra {
+		fmt.Printf("\nNamespaces weaker in live vs baseline (%d):\n", len(j.Extra))
+		for _, e := range j.Extra {
+			fmt.Printf(" - Namespace %s: baseline=%s, live=%s → %s\n",
+				e.Namespace, e.Baseline, e.Live, e.DriftType)
+		}
+	} else if opts.DriftType == "extra" {
+		fmt.Println("\nNo weaker (extra-risk) PSA drift detected (after filters).")
+	}
+
+	if hasMissing {
+		fmt.Printf("\nNamespaces stricter in live vs baseline (%d):\n", len(j.Missing))
+		for _, e := range j.Missing {
+			fmt.Printf(" - Namespace %s: baseline=%s, live=%s → %s\n",
+				e.Namespace, e.Baseline, e.Live, e.DriftType)
+		}
+	} else if opts.DriftType == "missing" {
+		fmt.Println("\nNo stricter (missing-risk) PSA drift detected (after filters).")
 	}
 }

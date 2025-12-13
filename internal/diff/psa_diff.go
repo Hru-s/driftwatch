@@ -7,11 +7,22 @@ import (
 )
 
 // PSADrift is the aggregated PSA drift result.
+// Extra:   PSA posture in right/live is weaker (less restrictive) than left/baseline,
+//
+//	OR namespaces only present in live.
+//
+// Missing: PSA posture in right/live is stronger (more restrictive) than left/baseline,
+//
+//	OR namespaces present in baseline but missing in live.
 type PSADrift struct {
-	Entries []model.PSADriftEntry
+	Extra   []model.PSADriftEntry
+	Missing []model.PSADriftEntry
 }
 
-// DiffPSA compares baseline vs live NamespacePSA slices.
+// DiffPSA compares baseline vs live NamespacePSA slices and buckets drift into Extra/Missing.
+// Semantics (direction):
+//   - Extra:   live is weaker / more permissive than baseline (security regression)
+//   - Missing: live is stronger / more restrictive than baseline (security tightening drift)
 func DiffPSA(baseline, live []model.NamespacePSA) PSADrift {
 	bMap := make(map[string]model.NamespacePSA, len(baseline))
 	lMap := make(map[string]model.NamespacePSA, len(live))
@@ -23,34 +34,49 @@ func DiffPSA(baseline, live []model.NamespacePSA) PSADrift {
 		lMap[l.Namespace] = l
 	}
 
-	var entries []model.PSADriftEntry
+	var extra []model.PSADriftEntry
+	var missing []model.PSADriftEntry
 
-	// Baseline-driven: missing + weaker/stronger.
+	// Baseline-driven: namespaces missing in live + posture changes.
 	for ns, b := range bMap {
 		l, ok := lMap[ns]
 		if !ok {
-			entries = append(entries, model.PSADriftEntry{
+			// Namespace/PSA entry present in baseline but missing in live.
+			missing = append(missing, model.PSADriftEntry{
 				Namespace: ns,
 				Baseline:  b.Enforce,
-				DriftType: "missing", // namespace/PSA not present in live
+				DriftType: "missing",
 			})
 			continue
 		}
 
 		if b.Enforce != l.Enforce {
-			entries = append(entries, model.PSADriftEntry{
+			dir, label := classifyPSADirection(b.Enforce, l.Enforce)
+
+			e := model.PSADriftEntry{
 				Namespace: ns,
 				Baseline:  b.Enforce,
 				Live:      l.Enforce,
-				DriftType: classifyPSADrift(b.Enforce, l.Enforce),
-			})
+				DriftType: label, // "weaker" | "stronger" | "different"
+			}
+
+			switch dir {
+			case "extra":
+				extra = append(extra, e)
+			case "missing":
+				missing = append(missing, e)
+			default:
+				// If direction can't be determined, bucket to Extra by default
+				// (conservative: treat as potential regression).
+				extra = append(extra, e)
+			}
 		}
 	}
 
 	// Namespaces only in live.
 	for ns, l := range lMap {
 		if _, ok := bMap[ns]; !ok {
-			entries = append(entries, model.PSADriftEntry{
+			extra = append(extra, model.PSADriftEntry{
 				Namespace: ns,
 				Live:      l.Enforce,
 				DriftType: "extra",
@@ -58,31 +84,42 @@ func DiffPSA(baseline, live []model.NamespacePSA) PSADrift {
 		}
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Namespace < entries[j].Namespace
-	})
+	// Deterministic ordering
+	sort.Slice(extra, func(i, j int) bool { return extra[i].Namespace < extra[j].Namespace })
+	sort.Slice(missing, func(i, j int) bool { return missing[i].Namespace < missing[j].Namespace })
 
-	return PSADrift{Entries: entries}
+	return PSADrift{Extra: extra, Missing: missing}
 }
 
-func classifyPSADrift(base, live model.PSALevel) string {
-	order := map[model.PSALevel]int{
-		model.PSALevelPrivileged: 1,
-		model.PSALevelBaseline:   2,
-		model.PSALevelRestricted: 3,
-	}
+func classifyPSADirection(base, live model.PSALevel) (direction string, label string) {
+	// Higher = more restrictive
+	b := psaRank(base)
+	l := psaRank(live)
 
-	b := order[base]
-	l := order[live]
-
-	if b == 0 || l == 0 {
-		return "different"
-	}
+	// If ranks are comparable:
 	if l < b {
-		return "weaker" // less restrictive than baseline
+		return "extra", "weaker" // live less restrictive than baseline
 	}
 	if l > b {
-		return "stronger"
+		return "missing", "stronger" // live more restrictive than baseline
 	}
-	return "different"
+
+	// Same rank but different value (unknown/custom strings)
+	// Direction is ambiguous; still report drift.
+	return "extra", "different"
+}
+
+func psaRank(level model.PSALevel) int {
+	switch level {
+	case model.PSALevelPrivileged:
+		return 1
+	case model.PSALevelBaseline:
+		return 2
+	case model.PSALevelRestricted:
+		return 3
+	default:
+		// Treat missing/unknown as weakest.
+		// This makes baseline=restricted, live="" classify as weaker (extra-risk).
+		return 0
+	}
 }
